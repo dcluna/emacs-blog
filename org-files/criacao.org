@@ -1,0 +1,111 @@
+#+TITLE: Criando um blog com EmacsLisp
+#+AUTHOR: Daniel Luna
+#+EMAIL: dancluna@gmail.com
+#+LANGUAGE: br
+#+LINK_UP: http://ec2-50-112-8-39.us-west-2.compute.amazonaws.com:8010
+#+LINK_HOME: http://ec2-50-112-8-39.us-west-2.compute.amazonaws.com:8010
+#+OPTIONS: num:nil toc:nil f:nil todo:nil tasks:nil 
+#+BIND: org-export-html-postamble nil
+* Ou, como abusar de suas ferramentas preferidas
+  Em algum post futuro, pretendo explicar melhor a arquitetura do
+  Emacs, mas por enquanto, basta saber que você pode realizar no Emacs as
+  mesmas tarefas que seus scripts shell/Perl/Python/[[http://www.muppetlabs.com/~breadbox/bf/][Brainf*ck]] estão
+  fazendo agora. CGI? Bem, o negócio é um pouco mais
+  embaixo...apresento-lhe o:
+** Elnode
+   [[http://elnode.org/][Elnode]] é um servidor web assíncrono (ou seja, as operações sobre a rede (de I/O) não bloqueiam o
+   Emacs), bem ao estilo do [[http://nodejs.org][node.js]]. Podemos utilizá-lo como
+   ferramenta para criação de aplicações
+   web em EmacsLisp. A escolha de linguagem é inusitada
+   ("você vai mesmo rodar seu blog no seu editor de texto?", "trololol
+   emacs é um ótimo SO, só falta um editor de texto decente"), com
+   certeza, e o próprio autor fala sobre isso [[https://github.com/nicferrier/elnode/blob/master/elnode.org][aqui]]:
+   #+BEGIN_SRC other
+   Q: What if my friends laugh at me for running a web browser in my
+   editor?
+
+   A: Get better friends? #emacs is a good source of fun people
+
+   Alternately start a new business that uses elnode and pisses on the
+   competition
+
+   because it is faster and more reliable.   
+
+   then buy new friends.
+
+   Or go back to using Ruby because Ruby is, ya know, really cool. Like your friends say
+   #+END_SRC
+   Não pretendo repetir o que está escrito no [[https://github.com/nicferrier/elnode/][github do projeto]], você
+   pode lê-lo e imaginar suas próprias brincadeiras, como fazer um emacsclient
+   remoto (bem melhor que [[http://www.ymacs.org/demo/][Ymacs]]).   
+** Estrutura do blog
+   OK, estamos prontos para meu plano de dominação mundial. Ou pelo menos para ter uma aposentadoria aos 30 anos, com uma mansão na
+   beira de uma praia no Caribe, com um Porsche na garagem e alguns
+   milhares no banco. Utilizarei uma ferramenta [[http://cdn.screenrant.com/wp-content/uploads/Philip-K.-Dicks-Ubik.jpg][ubíqua]] para
+   web, com milhares de homens-hora aplicados em seu
+   desenvolvimento, facilmente instalável em qualquer máquina Linux
+   para gerar blogs de uma maneira fácil. [[http://wordpress.org/][Parece familiar?]]        
+*** Arquivos -> URLs
+    Para criar uma versão 0.0.0...1 do nosso Emacspress, podemos começar mapeando um diretório cheio de arquivos org
+    para urls. Isso é bem simples com o elnode, tanto que há um
+    exemplo pronto para isso:
+    #+BEGIN_SRC elisp
+(defun elnode-org-handler (httpcon)
+  (elnode-docroot-for "~/work/org"
+      with org-file
+      on httpcon
+      do (with-current-buffer (find-file-noselect org-file)
+           (let ((org-html
+                  ;; This might throw errors so you could condition-case it
+                  (org-export-as-html 3 nil nil 'string)))
+             (elnode-send-html httpcon org-html)))))
+    #+END_SRC
+    Esse exemplo utiliza as funções de exportar do Org-mode (para mais
+    informações, C-h i m Org Mode m Exporting) para gerar o HTML da
+    página. Não é necessário se preocupar em guardar esses dados em um
+    arquivo pois o próprio Elnode se encarrega de fazer caching dos
+    resultados.
+    Um blog minimamente utilizável também teria uma página
+    'principal' com links para os outros arquivos, de preferência um índice. Infelizmente, o código que gera índices para raízes ainda
+    não está 100%, de acordo com a nota do autor ("TODO make this
+    usable by people generally"). Talvez me aventure a fazer isso
+    qualquer dia desses.
+*** Internacionalização
+    Eventualmente, um blog profissional (servido via emacs...ha ha) teria versões em inglês e
+    português dos arquivos; para implementar isso, o recurso
+    de dispatching do Elnode seria bem interessante:
+    #+BEGIN_SRC elisp
+(defvar
+   my-app-routes
+   '(("^my-host.example.com//br/\\(.*\\)" . br-server)
+     ("^my-host.example.com//br/\\(.*\\)" . en-server)
+     ("^.*//\\(.*\\)" . elnode-webserver)))
+
+(defun root-handler (httpcon)
+  (elnode-hostpath-dispatcher httpcon my-app-routes))
+
+(elnode-start 'root-handler :port 8009)
+    #+END_SRC
+    Para criar os handlers, só precisaríamos de uma função para
+    criá-los em relação a um subdiretório:
+    #+BEGIN_SRC elisp
+(defun make-org-handler (directory)
+  "Makes an Elnode handler for DIRECTORY."
+  (lambda (httpcon) (elnode-docroot-for directory
+                      with org-file
+                      on httpcon
+                      do (with-current-buffer (find-file-noselect org-file)
+                           (let ((org-html
+                                  ;; This might throw errors so you could condition-case it
+                                  (org-export-as-html 3 nil nil 'string)))
+                             (elnode-send-html httpcon org-html))))))
+
+(setq br-handler (make-org-handler "~/org-files/br"))
+(setq en-handler (make-org-handler "~/org-files/en"))
+    #+END_SRC    
+** Le fin
+   Emacs Lisp pode não ser a melhor linguagem do mundo, mas com
+   certeza serve para muito mais do que apenas trocar os keybindings
+   padrão. Pretendo mostrar mais algumas "mágicas" que esse ambiente
+   permite no futuro. Enquanto isso, divirta-se lendo o código para
+   esse blog.

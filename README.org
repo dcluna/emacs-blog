@@ -1,0 +1,2 @@
+* Emacs-blog
+  Code for my Elnode blog.
